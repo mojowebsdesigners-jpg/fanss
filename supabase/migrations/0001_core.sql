@@ -425,8 +425,9 @@ $$;
 drop trigger if exists on_auth_last_login on auth.users;
 create trigger on_auth_last_login
   after update on auth.users
+  for each row
   when (new.last_sign_in_at is distinct from old.last_sign_in_at)
-  for each row execute function public.touch_last_login();
+  execute function public.touch_last_login();
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- RLS: enable on every table. Policies use the helper fns; service-role
@@ -455,60 +456,76 @@ alter table public.referral_rewards enable row level security;
 alter table public.payout_records enable row level security;
 
 -- profiles: public read of basic fields, self-update limited fields
+drop policy if exists profiles_read_all on public.profiles;
 create policy profiles_read_all on public.profiles
   for select to authenticated using (true);
+drop policy if exists profiles_self_update on public.profiles;
 create policy profiles_self_update on public.profiles
   for update to authenticated using (id = auth.uid())
   with check (id = auth.uid() and role = (select role from public.profiles where id = auth.uid()) and status = 'ACTIVE');
 
 -- creator profile: everyone authenticated can read; creator updates own
+drop policy if exists creator_profile_read on public.creator_profiles;
 create policy creator_profile_read on public.creator_profiles
   for select to authenticated using (true);
+drop policy if exists creator_profile_update on public.creator_profiles;
 create policy creator_profile_update on public.creator_profiles
   for update to authenticated using (profile_id = auth.uid()) with check (profile_id = auth.uid());
 
 -- platform settings: authenticated read, admin write
+drop policy if exists settings_read on public.platform_settings;
 create policy settings_read on public.platform_settings
   for select to authenticated using (true);
+drop policy if exists settings_admin_write on public.platform_settings;
 create policy settings_admin_write on public.platform_settings
   for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- plans: read for authenticated; admin manage
+drop policy if exists plans_read on public.subscription_plans;
 create policy plans_read on public.subscription_plans
   for select to authenticated using (true);
+drop policy if exists plans_admin_all on public.subscription_plans;
 create policy plans_admin_all on public.subscription_plans
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- subscriptions: user reads own; creator reads all; writes via service role only
+drop policy if exists subs_read_own on public.subscriptions;
 create policy subs_read_own on public.subscriptions
   for select to authenticated using (user_id = auth.uid() or public.is_creator() or public.is_admin());
 
 -- vault folders
+drop policy if exists folders_creator on public.vault_folders;
 create policy folders_creator on public.vault_folders
   for all to authenticated using (creator_id = auth.uid() or public.is_admin())
   with check (creator_id = auth.uid());
 
 -- media assets
+drop policy if exists assets_creator on public.media_assets;
 create policy assets_creator on public.media_assets
   for all to authenticated using (creator_id = auth.uid() or public.is_admin())
   with check (creator_id = auth.uid());
+drop policy if exists assets_read_all_auth on public.media_assets;
 create policy assets_read_all_auth on public.media_assets
   for select to authenticated using (true);
 
 -- posts: public read of published; creator full control; drafts creator-only
+drop policy if exists posts_read on public.posts;
 create policy posts_read on public.posts
   for select to authenticated, anon using (
     status = 'published' and deleted_at is null
     or creator_id = auth.uid()
     or public.is_admin()
   );
+drop policy if exists posts_creator_write on public.posts;
 create policy posts_creator_write on public.posts
   for all to authenticated using (creator_id = auth.uid())
   with check (creator_id = auth.uid());
+drop policy if exists posts_admin_write on public.posts;
 create policy posts_admin_write on public.posts
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- post media: same visibility as parent post
+drop policy if exists post_media_read on public.post_media;
 create policy post_media_read on public.post_media
   for select to authenticated, anon using (
     exists (
@@ -517,6 +534,7 @@ create policy post_media_read on public.post_media
         and (p.status = 'published' and p.deleted_at is null or p.creator_id = auth.uid() or public.is_admin())
     )
   );
+drop policy if exists post_media_creator on public.post_media;
 create policy post_media_creator on public.post_media
   for all to authenticated using (
     exists (select 1 from public.posts p where p.id = post_id and p.creator_id = auth.uid())
@@ -525,41 +543,54 @@ create policy post_media_creator on public.post_media
   );
 
 -- likes: insert/delete own; read all
+drop policy if exists likes_read on public.likes;
 create policy likes_read on public.likes
   for select to authenticated using (true);
+drop policy if exists likes_write_own on public.likes;
 create policy likes_write_own on public.likes
   for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- comments
+drop policy if exists comments_read on public.comments;
 create policy comments_read on public.comments
   for select to authenticated, anon using (not hidden or user_id = auth.uid() or public.is_admin() or public.is_creator());
+drop policy if exists comments_write_own on public.comments;
 create policy comments_write_own on public.comments
   for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists comments_delete_own on public.comments;
 create policy comments_delete_own on public.comments
   for delete to authenticated using (user_id = auth.uid());
+drop policy if exists comments_moderate on public.comments;
 create policy comments_moderate on public.comments
   for update to authenticated using (public.is_creator() or public.is_admin()) with check (true);
 
 -- saved posts / media
+drop policy if exists saved_posts_own on public.saved_posts;
 create policy saved_posts_own on public.saved_posts
   for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists saved_media_own on public.saved_media;
 create policy saved_media_own on public.saved_media
   for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- post views
+drop policy if exists views_insert on public.post_views;
 create policy views_insert on public.post_views
   for insert to authenticated with check (true);
 
 -- bundles: public read active; creator manage
+drop policy if exists bundles_read on public.content_bundles;
 create policy bundles_read on public.content_bundles
   for select to authenticated, anon using (status = 'active' or creator_id = auth.uid() or public.is_admin());
+drop policy if exists bundles_creator on public.content_bundles;
 create policy bundles_creator on public.content_bundles
   for all to authenticated using (creator_id = auth.uid()) with check (creator_id = auth.uid());
 
+drop policy if exists bundle_items_read on public.bundle_items;
 create policy bundle_items_read on public.bundle_items
   for select to authenticated, anon using (
     exists (select 1 from public.content_bundles b where b.id = bundle_id and (b.status = 'active' or b.creator_id = auth.uid() or public.is_admin()))
   );
+drop policy if exists bundle_items_creator on public.bundle_items;
 create policy bundle_items_creator on public.bundle_items
   for all to authenticated using (
     exists (select 1 from public.content_bundles b where b.id = bundle_id and b.creator_id = auth.uid())
@@ -568,20 +599,26 @@ create policy bundle_items_creator on public.bundle_items
   );
 
 -- promotions: public read active; creator manage
+drop policy if exists promos_read on public.promotions;
 create policy promos_read on public.promotions
   for select to authenticated, anon using (active or creator_id = auth.uid() or public.is_admin());
+drop policy if exists promos_creator on public.promotions;
 create policy promos_creator on public.promotions
   for all to authenticated using (creator_id = auth.uid()) with check (creator_id = auth.uid());
 
+drop policy if exists promo_redemptions_read on public.promotion_redemptions;
 create policy promo_redemptions_read on public.promotion_redemptions
   for select to authenticated using (user_id = auth.uid() or public.is_creator() or public.is_admin());
 
 -- referrals
+drop policy if exists referrals_read_own on public.referrals;
 create policy referrals_read_own on public.referrals
   for select to authenticated using (referrer_id = auth.uid() or referred_id = auth.uid() or public.is_admin());
+drop policy if exists rewards_read_own on public.referral_rewards;
 create policy rewards_read_own on public.referral_rewards
   for select to authenticated using (user_id = auth.uid() or public.is_admin());
 
 -- payouts: creator/admin read only
+drop policy if exists payouts_read on public.payout_records;
 create policy payouts_read on public.payout_records
   for select to authenticated using (creator_id = auth.uid() or public.is_admin());

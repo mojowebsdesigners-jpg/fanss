@@ -68,7 +68,8 @@ create policy "vault_creator_rw" on storage.objects
 -- ═══════════════════════════════════════════════════════════════════════════
 insert into public.platform_settings (id) values (1) on conflict (id) do nothing;
 
--- creator account
+-- creator account (auth.users.email has a PARTIAL unique index, so
+-- `on conflict (email)` is not usable — guard with not exists instead)
 insert into auth.users (
   instance_id, id, aud, role, email,
   encrypted_password, email_confirmed_at,
@@ -76,7 +77,7 @@ insert into auth.users (
   created_at, updated_at, confirmation_token, recovery_token,
   email_change, email_change_token_new
 )
-values (
+select
   '00000000-0000-0000-0000-000000000000', gen_random_uuid(),
   'authenticated', 'authenticated',
   'creator@lumina.local',
@@ -85,8 +86,7 @@ values (
   '{"provider":"email","providers":["email"]}'::jsonb,
   '{"display_name":"Aurora Luxe"}'::jsonb,
   now(), now(), '', '', '', ''
-)
-on conflict (email) do nothing;
+where not exists (select 1 from auth.users where email = 'creator@lumina.local');
 
 -- admin account
 insert into auth.users (
@@ -96,7 +96,7 @@ insert into auth.users (
   created_at, updated_at, confirmation_token, recovery_token,
   email_change, email_change_token_new
 )
-values (
+select
   '00000000-0000-0000-0000-000000000000', gen_random_uuid(),
   'authenticated', 'authenticated',
   'admin@lumina.local',
@@ -105,8 +105,7 @@ values (
   '{"provider":"email","providers":["email"]}'::jsonb,
   '{}'::jsonb,
   now(), now(), '', '', '', ''
-)
-on conflict (email) do nothing;
+where not exists (select 1 from auth.users where email = 'admin@lumina.local');
 
 -- creator profile promotion + singleton creator_profiles row
 update public.profiles
@@ -150,7 +149,7 @@ select p.id, 'Welcome to my world',
        'PUBLIC', 'published', true, now(), array['welcome']
 from public.profiles p
 where p.email = 'creator@lumina.local'
-  and not exists (select 1 from public.posts);
+  and not exists (select 1 from public.posts where title = 'Welcome to my world');
 
 insert into public.posts (creator_id, title, caption, visibility, status, published_at, tags)
 select p.id, 'Behind the veil',
@@ -158,7 +157,7 @@ select p.id, 'Behind the veil',
        'SUBSCRIBERS', 'published', now(), array['exclusive']
 from public.profiles p
 where p.email = 'creator@lumina.local'
-  and not exists (select 1 from public.posts);
+  and not exists (select 1 from public.posts where title = 'Behind the veil');
 
 insert into public.posts (creator_id, title, caption, visibility, price, status, published_at, tags)
 select p.id, 'Midnight set — full series',
@@ -166,7 +165,7 @@ select p.id, 'Midnight set — full series',
        'PPV', 9.99, 'published', now(), array['ppv','premium']
 from public.profiles p
 where p.email = 'creator@lumina.local'
-  and not exists (select 1 from public.posts);
+  and not exists (select 1 from public.posts where title = 'Midnight set — full series');
 
 insert into public.posts (creator_id, title, caption, visibility, status, scheduled_at, tags)
 select p.id, 'Studio session (draft)',
@@ -174,7 +173,7 @@ select p.id, 'Studio session (draft)',
        'PUBLIC', 'draft', null, array['studio']
 from public.profiles p
 where p.email = 'creator@lumina.local'
-  and not exists (select 1 from public.posts);
+  and not exists (select 1 from public.posts where title = 'Studio session (draft)');
 
 -- welcome promotion
 insert into public.promotions (creator_id, name, code, discount_pct, banner_text, description, target_plan_id)

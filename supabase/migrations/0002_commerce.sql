@@ -248,6 +248,7 @@ alter table public.creator_analytics enable row level security;
 alter table public.content_analytics enable row level security;
 
 -- payments: owner + creator read only. Writes happen exclusively via service role.
+drop policy if exists payments_read_own on public.payments;
 create policy payments_read_own on public.payments
   for select to authenticated using (
     user_id = auth.uid()
@@ -255,12 +256,14 @@ create policy payments_read_own on public.payments
     or public.is_admin()
   );
 
+drop policy if exists payment_events_read on public.payment_events;
 create policy payment_events_read on public.payment_events
   for select to authenticated using (
     exists (select 1 from public.payments p where p.id = payment_id and (p.user_id = auth.uid() or p.creator_id = auth.uid() or public.is_admin()))
   );
 
 -- purchases: buyer + creator read; insert only via service role after payment verification
+drop policy if exists ppv_read on public.post_purchases;
 create policy ppv_read on public.post_purchases
   for select to authenticated using (
     user_id = auth.uid()
@@ -268,6 +271,7 @@ create policy ppv_read on public.post_purchases
     or public.is_admin()
   );
 
+drop policy if exists tips_read on public.tips;
 create policy tips_read on public.tips
   for select to authenticated using (
     user_id = auth.uid()
@@ -275,6 +279,7 @@ create policy tips_read on public.tips
     or public.is_admin()
   );
 
+drop policy if exists bundle_purchases_read on public.bundle_purchases;
 create policy bundle_purchases_read on public.bundle_purchases
   for select to authenticated using (
     user_id = auth.uid()
@@ -283,16 +288,20 @@ create policy bundle_purchases_read on public.bundle_purchases
   );
 
 -- conversations: only the two participants (or admin)
+drop policy if exists conv_read on public.conversations;
 create policy conv_read on public.conversations
   for select to authenticated using (
     fan_id = auth.uid() or creator_id = auth.uid() or public.is_admin()
   );
+drop policy if exists conv_insert_fan on public.conversations;
 create policy conv_insert_fan on public.conversations
   for insert to authenticated with check (fan_id = auth.uid());
+drop policy if exists conv_update_participants on public.conversations;
 create policy conv_update_participants on public.conversations
   for update to authenticated using (fan_id = auth.uid() or creator_id = auth.uid());
 
 -- messages: participants read; sender inserts
+drop policy if exists messages_read on public.messages;
 create policy messages_read on public.messages
   for select to authenticated using (
     exists (
@@ -300,6 +309,7 @@ create policy messages_read on public.messages
       where c.id = conversation_id and (c.fan_id = auth.uid() or c.creator_id = auth.uid())
     ) or public.is_admin()
   );
+drop policy if exists messages_insert_sender on public.messages;
 create policy messages_insert_sender on public.messages
   for insert to authenticated with check (
     sender_id = auth.uid()
@@ -308,9 +318,11 @@ create policy messages_insert_sender on public.messages
       where c.id = conversation_id and (c.fan_id = auth.uid() or c.creator_id = auth.uid())
     )
   );
+drop policy if exists messages_update_sender on public.messages;
 create policy messages_update_sender on public.messages
   for update to authenticated using (sender_id = auth.uid());
 
+drop policy if exists msg_media_read on public.message_media;
 create policy msg_media_read on public.message_media
   for select to authenticated using (
     exists (
@@ -319,6 +331,7 @@ create policy msg_media_read on public.message_media
       where m.id = message_id and (c.fan_id = auth.uid() or c.creator_id = auth.uid())
     ) or public.is_admin()
   );
+drop policy if exists msg_media_sender on public.message_media;
 create policy msg_media_sender on public.message_media
   for all to authenticated using (
     exists (
@@ -332,6 +345,7 @@ create policy msg_media_sender on public.message_media
     )
   );
 
+drop policy if exists msg_purchases_read on public.message_purchases;
 create policy msg_purchases_read on public.message_purchases
   for select to authenticated using (
     user_id = auth.uid()
@@ -344,34 +358,45 @@ create policy msg_purchases_read on public.message_purchases
   );
 
 -- notifications: owner only
+drop policy if exists notif_read_own on public.notifications;
 create policy notif_read_own on public.notifications
   for select to authenticated using (user_id = auth.uid());
+drop policy if exists notif_update_own on public.notifications;
 create policy notif_update_own on public.notifications
   for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists notif_delete_own on public.notifications;
 create policy notif_delete_own on public.notifications
   for delete to authenticated using (user_id = auth.uid());
 
 -- reports: reporter sees own; admin sees all
+drop policy if exists reports_read on public.reports;
 create policy reports_read on public.reports
   for select to authenticated using (reporter_id = auth.uid() or public.is_admin());
+drop policy if exists reports_insert_own on public.reports;
 create policy reports_insert_own on public.reports
   for insert to authenticated with check (reporter_id = auth.uid());
+drop policy if exists reports_admin_update on public.reports;
 create policy reports_admin_update on public.reports
   for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- blocks: private to the blocker
+drop policy if exists blocks_own on public.blocked_users;
 create policy blocks_own on public.blocked_users
   for all to authenticated using (blocker_id = auth.uid()) with check (blocker_id = auth.uid());
+drop policy if exists blocks_read_creator on public.blocked_users;
 create policy blocks_read_creator on public.blocked_users
   for select to authenticated using (blocked_id = auth.uid() or public.is_admin());
 
 -- audit log: admin read; writes via service role
+drop policy if exists audit_admin_read on public.admin_actions;
 create policy audit_admin_read on public.admin_actions
   for select to authenticated using (public.is_admin());
 
 -- analytics: creator/admin read
+drop policy if exists creator_analytics_read on public.creator_analytics;
 create policy creator_analytics_read on public.creator_analytics
   for select to authenticated using (creator_id = auth.uid() or public.is_admin());
+drop policy if exists content_analytics_read on public.content_analytics;
 create policy content_analytics_read on public.content_analytics
   for select to authenticated using (
     exists (select 1 from public.posts p where p.id = post_id and (p.creator_id = auth.uid() or public.is_admin()))
