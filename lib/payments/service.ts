@@ -87,7 +87,12 @@ export async function createPendingPayment(
       .update({ status: "failed" })
       .eq("id", payment.id);
     console.error("provider createPayment failed", e);
-    return { error: "The payment provider is unavailable right now. Please try again shortly." };
+    const detail = e instanceof Error ? e.message : "";
+    return {
+      error: detail
+        ? `Payment provider rejected the request: ${detail}`
+        : "The payment provider is unavailable right now. Please try again shortly.",
+    };
   }
 }
 
