@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { ok, fail } from "@/lib/api";
@@ -21,10 +22,15 @@ export async function GET(req: NextRequest) {
 
 async function handle(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization");
-  // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`
-  if (secret && auth !== `Bearer ${secret}`) {
-    return fail("UNAUTHORIZED", "Bad cron secret.", 401);
+  const auth = req.headers.get("authorization") ?? "";
+  // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
+  // Fail closed: if CRON_SECRET is not configured, refuse to run rather than
+  // letting anyone trigger subscription expirations and mass notifications.
+  // Compare via HMAC digest to avoid leaking the secret through timing.
+  const expected = crypto.createHash("sha256").update(`Bearer ${secret ?? ""}`).digest();
+  const provided = crypto.createHash("sha256").update(auth).digest();
+  if (!secret || !crypto.timingSafeEqual(expected, provided)) {
+    return fail("UNAUTHORIZED", "Bad or missing cron secret.", 401);
   }
 
   const admin = supabaseAdmin();

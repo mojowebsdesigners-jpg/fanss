@@ -32,10 +32,16 @@ export async function POST(req: NextRequest) {
     .eq("user_id", user.id)
     .eq("status", "active");
 
-  // sign out everywhere
+  // sign out everywhere — server-first (global revoke of all refresh tokens),
+  // THEN clear local browser session. (Server-side signOut must not depend on
+  // browser code paths that can throw in a route handler.)
   await supabaseAdmin().auth.signOut({ scope: "global" }).catch(() => {});
-  const { supabaseBrowser } = await import("@/lib/supabase-browser");
-  await supabaseBrowser().auth.signOut();
+  try {
+    const { supabaseServer } = await import("@/lib/supabase");
+    await (await supabaseServer()).auth.signOut();
+  } catch {
+    // cookie cleanup is best-effort; tokens are already revoked server-side
+  }
 
   return ok({ deleted: true });
 }

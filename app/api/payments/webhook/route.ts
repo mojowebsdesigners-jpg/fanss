@@ -95,11 +95,38 @@ async function processEvent(payload: Record<string, unknown>, deliveryId: number
     payload,
   });
 
+  let result = status || "ok";
+
   switch (status) {
     case "finished":
-    case "confirmed":
+    case "confirmed": {
+      //
+      // ENTITY VERIFICATION — never grant value on webhook text alone, even
+      // when the signature is valid. A valid HMAC proves the message came
+      // from whoever holds the IPN secret (which does not authenticate the
+      // payment's *state*, and does not survive that secret leaking). Ask the
+      // provider API directly before fulfilling:
+      //
+      const remote = await provider.fetchPaymentStatus(providerPaymentId);
+      if (remote && remote.status !== "completed") {
+        // Provider disagrees with the webhook — refuse to fulfill.
+        // (Out-of-order/late "failed" webhooks land here harmlessly: the
+        // completion guard in completePayment ignores them once paid.)
+        result = `MISMATCH:${status}->${remote.status}`;
+        await admin
+          .from("webhook_deliveries")
+          .update({ processed: true, result })
+          .eq("id", deliveryId);
+        return;
+      }
       await completePayment(payment.id, details);
+      if (!remote) {
+        // API unreachable at verification time — completed, but flagged for
+        // reconciliation review rather than silently trusted.
+        result = "COMPLETED_UNVERIFIED";
+      }
       break;
+    }
     case "failed":
     case "expired":
     case "refunded":
@@ -114,5 +141,5 @@ async function processEvent(payload: Record<string, unknown>, deliveryId: number
       break;
   }
 
-  await admin.from("webhook_deliveries").update({ processed: true, result: status || "ok" }).eq("id", deliveryId);
+  await admin.from("webhook_deliveries").update({ processed: true, result }).eq("id", deliveryId);
 }

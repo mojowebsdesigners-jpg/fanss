@@ -176,9 +176,19 @@ export async function resolveMediaAccess(
   };
 }
 
-/** Signed URL for preview/thumbnail assets — safe to show to anyone. */
+/**
+ * Signed URL for preview/thumbnail assets shown on locked posts.
+ *
+ * SECURITY: falls back to the full-res storage path ONLY when the caller
+ * asserts the surrounding post is publicly viewable (visibility PUBLIC with
+ * no purchase wall). For SUBSCRIBERS/PPV posts the fallback chain stops at
+ * preview/thumb — if the creator never generated them, no URL is issued at
+ * all rather than leaking the original (a signed URL for the original IS the
+ * content: "blurred at the edges" placeholders are the only alternative).
+ */
 export async function previewMediaUrl(
-  assetId: string | null | undefined
+  assetId: string | null | undefined,
+  opts: { allowFullRes?: boolean } = {}
 ): Promise<string | null> {
   if (!assetId) return null;
   const admin = supabaseAdmin();
@@ -188,7 +198,8 @@ export async function previewMediaUrl(
     .eq("id", assetId)
     .maybeSingle();
   if (!asset || asset.deleted_at) return null;
-  const path = asset.preview_path || asset.thumb_path || asset.storage_path;
+  const path = asset.preview_path || asset.thumb_path || (opts.allowFullRes ? asset.storage_path : null);
+  if (!path) return null;
   const { data: signed } = await admin.storage.from("vault").createSignedUrl(path, 3600);
   return signed?.signedUrl ?? null;
 }

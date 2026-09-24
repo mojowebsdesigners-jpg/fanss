@@ -7,6 +7,15 @@ export async function PATCH(req: NextRequest) {
   const user = await getSessionUser();
   if (!user || (user.profile.role !== "CREATOR" && user.profile.role !== "ADMIN")) return forbidden();
 
+  // The caller must actually own the (singleton) creator profile — role alone
+  // is not proof of ownership. Admins are trusted operators and may too.
+  const { data: ownCreator } = await supabaseAdmin()
+    .from("creator_profiles")
+    .select("id")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  if (!ownCreator && user.profile.role !== "ADMIN") return forbidden("Not the creator of this platform.");
+
   const body = (await req.json().catch(() => ({}))) as {
     tagline?: string;
     about?: string;

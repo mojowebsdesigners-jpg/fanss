@@ -20,7 +20,13 @@ export async function supabaseServer() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                // CSRF hardening: session cookies are SameSite=Strict so
+                // cross-site requests never carry them. All state-changing
+                // API routes therefore reject forged cross-origin POSTs.
+                sameSite: "strict",
+              })
             );
           } catch {
             // called from a Server Component render — middleware handles refresh

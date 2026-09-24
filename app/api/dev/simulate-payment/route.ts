@@ -5,14 +5,17 @@ import { ok, fail, forbidden, notFound } from "@/lib/api";
 import { paymentProvider, completePayment } from "@/lib/payments/service";
 
 /**
- * DEV/TEST ONLY. Enabled when the active provider is the mock provider
- * (i.e. no real NOWPayments keys are configured). It runs the exact same
- * verified-fulfillment pipeline as a real webhook — this is how you test
- * the full payment lifecycle locally without fake states in production.
+ * DEV/TEST ONLY. Enabled ONLY when running outside production AND the active
+ * provider is the mock provider (i.e. no real NOWPayments keys configured).
+ * It runs the exact same verified-fulfillment pipeline as a real webhook —
+ * this is how you test the full payment lifecycle locally.
  */
 export async function POST(req: NextRequest) {
-  if (paymentProvider().name !== "mock") {
-    return forbidden("Simulation is only available with the mock payment provider.");
+  // Hard production kill-switch: even if the deployment is missing payment
+  // keys (which would silently activate the mock provider), fulfilling a
+  // payment without money moving must be impossible in production.
+  if (process.env.NODE_ENV === "production" || paymentProvider().name !== "mock") {
+    return forbidden("Simulation is only available in local development with the mock payment provider.");
   }
 
   const user = await getSessionUser();

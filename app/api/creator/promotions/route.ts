@@ -60,6 +60,11 @@ export async function PATCH(req: NextRequest) {
   if (!user || (user.profile.role !== "CREATOR" && user.profile.role !== "ADMIN")) return forbidden();
   const body = (await req.json().catch(() => ({}))) as { id?: string; active?: boolean };
   if (!body.id) return fail("BAD_REQUEST", "Missing id.");
-  await supabaseAdmin().from("promotions").update({ active: !!body.active }).eq("id", body.id);
+
+  // Ownership check: creators may only toggle their own promotions
+  // (ADMIN may toggle any). Prevents cross-creator tampering via guessed ids.
+  let q = supabaseAdmin().from("promotions").update({ active: !!body.active }).eq("id", body.id);
+  if (user.profile.role !== "ADMIN") q = q.eq("creator_id", user.id);
+  await q;
   return ok({ updated: true });
 }

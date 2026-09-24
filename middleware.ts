@@ -43,7 +43,11 @@ export async function middleware(req: NextRequest) {
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
           req.cookies.set(name, value);
-          res.cookies.set(name, value, options);
+          res.cookies.set(name, value, {
+            ...options,
+            // CSRF hardening — see lib/supabase.ts
+            sameSite: "strict",
+          });
         });
       },
     },
