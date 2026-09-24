@@ -43,18 +43,13 @@ export async function GET(req: NextRequest) {
 
   const { data: assets, count } = await q;
 
-  // thumbnails (short-lived signed urls)
-  const withUrls = [];
-  for (const a of assets ?? []) {
-    const { data: paths } = await supabaseAdmin()
-      .from("media_assets")
-      .select("thumb_path, storage_path")
-      .eq("id", a.id)
-      .maybeSingle();
-    const path = paths?.thumb_path || paths?.storage_path;
-    const { data: signed } = await supabaseAdmin().storage.from("vault").createSignedUrl(path!, 1800);
-    withUrls.push({ ...a, url: signed?.signedUrl ?? null, video: a.mime_type.startsWith("video/") });
-  }
+  // Same-origin proxy paths only — the creator's own browser re-authorizes
+  // every fetch; no storage URL ever reaches the client.
+  const withUrls = (assets ?? []).map((a) => ({
+    ...a,
+    url: `/api/media/${a.id}/file`,
+    video: a.mime_type.startsWith("video/"),
+  }));
 
   return ok({ assets: withUrls, total: count ?? 0 });
 }

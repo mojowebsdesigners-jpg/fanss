@@ -4,6 +4,12 @@ import { resolveMediaAccess } from "@/lib/access";
 import { ok, fail, notFound } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
 
+/**
+ * Returns playback URLs for authorized media. The URL handed out is a
+ * same-origin PROXY path, never a storage URL: anything copied from
+ * DevTools is useless in another browser, and every byte range served by
+ * /api/media/[id]/file is re-authorized (session + ownership/purchase).
+ */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const user = await getSessionUser();
@@ -19,9 +25,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   }
 
   return ok({
-    url: result.url,
+    url: `/api/media/${id}/file`,
     mime: result.mime,
     filename: result.filename,
-    expiresIn: result.expiresIn,
+    expiresIn: null,
   });
 }

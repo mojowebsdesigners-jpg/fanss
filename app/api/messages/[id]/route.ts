@@ -68,16 +68,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       for (const mm of mediaList) {
         const { data: asset } = await admin
           .from("media_assets")
-          .select("mime_type, thumb_path, preview_path, storage_path")
+          .select("id, mime_type")
           .eq("id", mm.asset_id)
           .maybeSingle();
         if (!asset) continue;
-        const path = asset.thumb_path || asset.preview_path || asset.storage_path;
-        const { data: signed } = await admin.storage.from("vault").createSignedUrl(path, 600);
+        // Same-origin proxy path only — bytes re-authorized per request;
+        // no storage URL is exposed to the client.
         media.push({
           id: mm.id,
           mime: asset.mime_type,
-          url: signed?.signedUrl ?? null,
+          url: `/api/media/${mm.asset_id}/file`,
           video: asset.mime_type.startsWith("video/"),
         });
       }

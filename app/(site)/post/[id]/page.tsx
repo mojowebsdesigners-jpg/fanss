@@ -57,6 +57,7 @@ export default async function PostPage({ params }: Props) {
       signedIn={!!user}
       isOwner={user?.id === post.creator_id}
       placeholder={lockedPlaceholder(post.id)}
+      viewerName={user?.profile?.username ?? "guest"}
     />
   );
 }

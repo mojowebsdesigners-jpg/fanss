@@ -11,6 +11,67 @@ export type MediaItem =
   | { kind: "image"; url: string; alt?: string }
   | { kind: "video"; url: string; poster?: string | null };
 
+/* ─── Anti-download protection ────────────────────────────────────────── */
+/**
+ * "What stays in the app stays in the app" client hardening.
+ *
+ * This is DETERRENT layering on top of the real security boundary (the
+ * authenticated streaming proxy in /api/media/[id]/file, which makes any
+ * copied URL worthless). Blocks: right-click open/save, drag-out, iOS long-
+ * press save callouts, selection/copy of media, print, and common save
+ * shortcuts. Honest limit: a screenshot cannot be prevented by any website.
+ */
+export function useMediaProtection() {
+  useEffect(() => {
+    const stop = (e: Event) => e.preventDefault();
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      // save page / save image / print
+      if (mod && (k === "s" || k === "p")) e.preventDefault();
+      // devtools shortcuts — nuisance reduction, not security
+      if (mod && e.shiftKey && (k === "i" || k === "j" || k === "c")) e.preventDefault();
+      if (k === "f12") e.preventDefault();
+    };
+    document.addEventListener("contextmenu", stop);
+    document.addEventListener("dragstart", stop);
+    document.addEventListener("copy", stop);
+    document.addEventListener("cut", stop);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("contextmenu", stop);
+      document.removeEventListener("dragstart", stop);
+      document.removeEventListener("copy", stop);
+      document.removeEventListener("cut", stop);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+}
+
+/** Diagonal viewer-identity watermark — screenshot forensics, not pixel-burn. */
+export function Watermark({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden select-none"
+      style={{ WebkitTouchCallout: "none" } as React.CSSProperties}
+    >
+      <div
+        className="absolute -inset-1/4 opacity-[0.13]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
+            `<svg xmlns='http://www.w3.org/2000/svg' width='220' height='150'><text x='0' y='60' font-family='sans-serif' font-size='13' fill='white' transform='rotate(-24 110 75)'>${text
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")} · Lumina</text></svg>`
+          )}")`,
+          backgroundRepeat: "repeat",
+        }}
+      />
+    </div>
+  );
+}
+
 /* ─── Locked preview ──────────────────────────────────────────────────── */
 export function LockedMedia({
   placeholder,
@@ -67,12 +128,15 @@ export function Lightbox({
   index,
   onClose,
   onIndex,
+  watermark,
 }: {
   items: MediaItem[];
   index: number;
   onClose: () => void;
   onIndex: (i: number) => void;
+  watermark?: string;
 }) {
+  useMediaProtection();
   const item = items[index];
 
   useEffect(() => {
@@ -111,10 +175,19 @@ export function Lightbox({
           </button>
         )}
         {item.kind === "image" ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.url} alt={item.alt ?? ""} className="max-h-full max-w-full rounded-xl object-contain" />
+          <span className="relative inline-flex max-h-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.url}
+              alt={item.alt ?? ""}
+              draggable={false}
+              className="max-h-full max-w-full rounded-xl object-contain select-none"
+              style={{ WebkitTouchCallout: "none", WebkitUserDrag: "none" } as React.CSSProperties}
+            />
+            {watermark ? <Watermark text={watermark} /> : null}
+          </span>
         ) : (
-          <VideoPlayer src={item.url} poster={item.poster} autoPlay className="max-h-full" />
+          <VideoPlayer src={item.url} poster={item.poster} autoPlay watermark={watermark} className="max-h-full" />
         )}
         {items.length > 1 && (
           <button
@@ -136,12 +209,15 @@ export function VideoPlayer({
   poster,
   autoPlay,
   className,
+  watermark,
 }: {
   src: string;
   poster?: string | null;
   autoPlay?: boolean;
   className?: string;
+  watermark?: string;
 }) {
+  useMediaProtection();
   const ref = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -173,7 +249,11 @@ export function VideoPlayer({
           setProgress(v.duration ? v.currentTime / v.duration : 0);
         }}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        controlsList="nodownload noplaybackrate"
+        disablePictureInPicture
+        onContextMenu={(e) => e.preventDefault()}
       />
+      {watermark ? <Watermark text={watermark} /> : null}
       {!playing && (
         <button
           onClick={toggle}
@@ -235,10 +315,13 @@ function fmtTime(s: number) {
 export function MediaGallery({
   items,
   onOpen,
+  watermark,
 }: {
   items: MediaItem[];
   onOpen?: (i: number) => void;
+  watermark?: string;
 }) {
+  useMediaProtection();
   const [lb, setLb] = useState<number | null>(null);
   if (items.length === 0) return null;
   return (
@@ -251,8 +334,18 @@ export function MediaGallery({
             className="group relative overflow-hidden rounded-xl bg-ink-3"
           >
             {m.kind === "image" ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.url} alt="" loading="lazy" className="aspect-square w-full object-cover transition duration-300 group-hover:scale-105" />
+              <span className="relative block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={m.url}
+                  alt=""
+                  loading="lazy"
+                  draggable={false}
+                  className="aspect-square w-full object-cover transition duration-300 group-hover:scale-105 select-none"
+                  style={{ WebkitTouchCallout: "none", WebkitUserDrag: "none" } as React.CSSProperties}
+                />
+                {watermark ? <Watermark text={watermark} /> : null}
+              </span>
             ) : (
               <span className="relative block aspect-square w-full">
                 {m.poster ? (
@@ -274,7 +367,7 @@ export function MediaGallery({
           </button>
         ))}
       </div>
-      {lb !== null && <Lightbox items={items} index={lb} onClose={() => setLb(null)} onIndex={setLb} />}
+      {lb !== null && <Lightbox items={items} index={lb} onClose={() => setLb(null)} onIndex={setLb} watermark={watermark} />}
     </>
   );
 }

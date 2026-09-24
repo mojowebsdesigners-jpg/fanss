@@ -79,7 +79,7 @@ export async function canMessageCreator(userId: string): Promise<{
 }
 
 export type MediaAccessResult =
-  | { ok: true; url: string; mime: string; filename: string; expiresIn: number }
+  | { ok: true; url: string; mime: string; filename: string; expiresIn: number; storagePath: string }
   | { ok: false; code: "NOT_FOUND" | "FORBIDDEN" | "PAYMENT_REQUIRED" };
 
 /**
@@ -160,19 +160,16 @@ export async function resolveMediaAccess(
 
   if (!allowed) return { ok: false, code: paymentRequired ? "PAYMENT_REQUIRED" : "FORBIDDEN" };
 
-  const { data: signed, error } = await admin.storage
-    .from("vault")
-    .createSignedUrl(asset.storage_path, 600);
-  if (error || !signed) {
-    console.error("signed url failed", error);
-    return { ok: false, code: "NOT_FOUND" };
-  }
+  // NOTE: no signed URL is ever issued here. Callers return the same-origin
+  // proxy path /api/media/<id>/file, which re-authorizes every request and
+  // streams bytes with no-store headers — storage URLs never reach a browser.
   return {
     ok: true,
-    url: signed.signedUrl,
+    url: `/api/media/${asset.id}/file`,
     mime: asset.mime_type,
     filename: asset.filename,
-    expiresIn: 600,
+    expiresIn: 0,
+    storagePath: asset.storage_path,
   };
 }
 

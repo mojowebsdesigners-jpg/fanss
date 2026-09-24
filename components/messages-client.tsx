@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowLeft, Lock, Paperclip, Send, DollarSign, X, Loader2 } from "lucide-react";
 import { Avatar, Button, useToast } from "./ui";
+import { useMediaProtection, Watermark } from "./media";
 import { cn, money, timeAgo } from "@/lib/format";
 
 type Conversation = {
@@ -28,10 +29,12 @@ export function MessagesClient({
   currentUserId,
   isCreator,
   initialConversation,
+  viewerName,
 }: {
   currentUserId: string;
   isCreator: boolean;
   initialConversation: string | null;
+  viewerName: string;
 }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [active, setActive] = useState<string | null>(initialConversation);
@@ -43,6 +46,7 @@ export function MessagesClient({
   const [showVault, setShowVault] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
+  useMediaProtection(); // no right-click save / drag-out / copy inside DMs
 
   const loadConvs = useCallback(async () => {
     const res = await fetch("/api/messages");
@@ -188,10 +192,27 @@ export function MessagesClient({
                             <div className="mb-2 grid gap-1.5">
                               {m.media.map((mm) =>
                                 mm.video ? (
-                                  <video key={mm.id} src={mm.url ?? ""} controls className="max-h-64 rounded-xl" />
+                                  <video
+                                    key={mm.id}
+                                    src={mm.url ?? ""}
+                                    controls
+                                    controlsList="nodownload noplaybackrate"
+                                    disablePictureInPicture
+                                    onContextMenu={(e) => e.preventDefault()}
+                                    className="max-h-64 rounded-xl"
+                                  />
                                 ) : (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img key={mm.id} src={mm.url ?? ""} className="max-h-64 rounded-xl object-cover" alt="" />
+                                  <span key={mm.id} className="relative inline-block">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={mm.url ?? ""}
+                                      draggable={false}
+                                      className="max-h-64 rounded-xl object-cover select-none"
+                                      style={{ WebkitTouchCallout: "none", WebkitUserDrag: "none" } as React.CSSProperties}
+                                      alt=""
+                                    />
+                                    <Watermark text={isCreator ? "Lumina" : viewerName} />
+                                  </span>
                                 )
                               )}
                             </div>

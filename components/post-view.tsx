@@ -20,6 +20,7 @@ export function PostView({
   signedIn,
   isOwner,
   placeholder,
+  viewerName,
 }: {
   postId: string;
   title: string | null;
@@ -32,6 +33,7 @@ export function PostView({
   signedIn: boolean;
   isOwner: boolean;
   placeholder: string;
+  viewerName: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -133,7 +135,7 @@ export function PostView({
           media === null ? (
             <div className="skeleton aspect-square w-full rounded-2xl" />
           ) : media.length > 0 ? (
-            <MediaGallery items={media} />
+            <MediaGallery items={media} watermark={isOwner ? "Lumina" : viewerName} />
           ) : null
         ) : visibility === "PPV" ? (
           <LockedMedia

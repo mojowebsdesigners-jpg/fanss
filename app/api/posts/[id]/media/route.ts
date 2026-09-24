@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/auth";
-import { canAccessPost } from "@/lib/access";
-import { previewMediaUrl, resolveMediaAccess } from "@/lib/access";
+import { canAccessPost, resolveMediaAccess } from "@/lib/access";
 import { ok, notFound } from "@/lib/api";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

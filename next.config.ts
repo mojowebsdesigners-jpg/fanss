@@ -8,8 +8,11 @@ const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""),
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "media-src 'self' blob: https:",
+  // images: same-origin (proxied vault media), data: (locked placeholders),
+  // the Supabase host (public avatars/branding only) — no other remote hosts
+  `img-src 'self' data: blob: https://${supabaseHost}`,
+  // media: same-origin proxy only — vault video never loads cross-origin
+  "media-src 'self'",
   `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://api.nowpayments.io https://api-sandbox.nowpayments.io`,
   "font-src 'self' data:",
   "object-src 'none'",
@@ -39,6 +42,10 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=(), payment=()",
           },
           { key: "X-DNS-Prefetch-Control", value: "on" },
+          // prevents any other origin from embedding/saving app media cross-site
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
         ],
       },
     ];
